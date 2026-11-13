@@ -56,7 +56,7 @@ env:
   CONFIG_FILE: ${{ format('config/{0}.config', github.event.inputs.profile) }}
   DIY_P1_SH: diy-part1.sh
   DIY_P2_SH: diy-part2.sh
-  UPLOAD_BIN_DIR: false
+  UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
   TZ: Asia/Shanghai
@@ -245,6 +245,7 @@ jobs:
         cd openwrt
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 V=s
+        make -j1 V=s image
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -281,7 +282,7 @@ jobs:
         # 创建刷机包目录并打包 zip
         mkdir -p flash_package
         BOOT_IMG=$(ls *boot.img.gz *boot.img 2>/dev/null | head -1)
-        SYSTEM_IMG=$(ls *system.img.gz *system.img 2>/dev/null | head -1)
+        SYSTEM_IMG=$(ls *rootfs.img.gz *rootfs.img *system.img.gz *system.img 2>/dev/null | head -1)
         if [ -z "$BOOT_IMG" ] || [ -z "$SYSTEM_IMG" ]; then
           echo "::error::固件文件未找到，编译可能失败！当前目录文件："
           ls -la
