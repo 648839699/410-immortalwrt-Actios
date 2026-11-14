@@ -213,6 +213,27 @@ jobs:
        cd openwrt
        make defconfig
        
+    - name: 校验额外包是否真正启用 (Verify extra packages)
+      if: ${{ inputs.extra_packages != '' }}
+      run: |
+        cd openwrt
+        PACKAGES=$(echo '${{ inputs.extra_packages }}' | sed 's/,/ /g')
+        MISS=""
+        for pkg in $PACKAGES; do
+          [ -z "$pkg" ] && continue
+          if grep -qx "CONFIG_PACKAGE_$pkg=y" .config; then
+            echo "  已启用: $pkg"
+          else
+            echo "::error::额外包【$pkg】未被启用：包名写错或当前软件源中不存在"
+            MISS="$MISS $pkg"
+          fi
+        done
+        if [ -n "$MISS" ]; then
+          echo "校验失败的包:$MISS"
+          exit 1
+        fi
+        echo "全部额外包校验通过"
+
     - name: Download package
       id: package
       run: |
@@ -222,13 +243,12 @@ jobs:
         find dl -size -1024c -exec rm -f {} \;
 
     - name: 查看 openwrt 目录
-      run: ls -la openwrt/
-      
-           ls -l .config
-      
-           ls -la openwrt/.config
+      run: |
+        ls -la openwrt/
+        echo "--- .config 大小 ---"
+        ls -l .config
+        ls -la openwrt/.config
 
- 
     - name: 自动上传最新源码生成.config编译配置
       uses: actions/upload-artifact@main
       with:
@@ -245,6 +265,13 @@ jobs:
         cd openwrt
         echo -e "$(nproc) thread compile"
         make -j$(nproc) || make -j1 V=s
+        if ! ls bin/targets/*/*/*boot.img* >/dev/null 2>&1 || ! ls bin/targets/*/*/*rootfs.img* >/dev/null 2>&1; then
+          echo "::error::未找到 boot.img / rootfs.img 产物，编译未真正完成"
+          ls -la bin/targets/*/*/ || true
+          exit 1
+        fi
+        echo "产物自检通过:"
+        ls -la bin/targets/*/*/*boot.img* bin/targets/*/*/*rootfs.img*
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=_$(cat DEVICE_NAME)" >> $GITHUB_ENV
